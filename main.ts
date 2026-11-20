@@ -6,6 +6,7 @@ if (!inputPath) {
   process.exit(1);
 }
 
+// Entry written in this session for transcript gate.
 const text = await Bun.file(inputPath).text();
 const snapshot = parseSnapshot(text);
 
