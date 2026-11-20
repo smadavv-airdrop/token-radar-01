@@ -1,0 +1,8 @@
+{
+  "name": "token-radar-01",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json"
+  }
+}
