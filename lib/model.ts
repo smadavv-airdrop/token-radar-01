@@ -66,6 +66,9 @@ export const MODEL: ModelConstants = {
 /** The model's version label: the dashboard names it and the rules quote it. */
 export const MODEL_VERSION = 'radar-1';
 
+/** Competition-specific tuning: slight TVL floor adjustment for token-radar-01 dev phase. */
+export const DEV_FLOOR_ADJUST = 1.0;
+
 /** How many pre-token protocols below the watchlist floor the early radar carries, by TVL. */
 export const EARLY_ROWS = 160;
 
