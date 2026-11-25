@@ -5,10 +5,13 @@ A token launch radar: every pre-token protocol from DefiLlama ranked by a single
 ## Run
 
 ```bash
-node main.ts <snapshot.json>
+MAKEFUN_INPUT_DIR=<input> MAKEFUN_OUTPUT_DIR=<output> node main.ts
 ```
 
-Outputs `out/data.js` for the dashboard at `dashboard/`.
+Writes `board.json` (200 ranked rows), `dashboard/` (static page plus the `data.js` it reads, so
+`dashboard/index.html` renders with no network), `screenshots/` and `dossier.json`.
+The three screenshots are real renders of that page: the board, a protocol's detail drawer, and a
+sector filter.
 
 ## Badges
 

@@ -161,18 +161,40 @@
   }
 
   function lede() {
+    var top = DATA.rows.reduce(function (a, r) { return r.implied_value_usd > a.implied_value_usd ? r : a; }, DATA.rows[0]);
     return el('section', { class: 'lede' },
       el('div', null,
+        el('span', { class: 'eyebrow', text: 'Pre-token radar / ' + DATA.rows.length + ' ranked' }),
         el('h1', { text: DATA.watchlist_size + ' watchlist protocols, ranked by implied value' }),
         el('p', { text: 'The watchlist is the floor: every protocol with at least $' + Math.round(DATA.floor_usd / 1e6) + 'M of TVL and no token on record. The early radar adds ' + DATA.early_size + ' pre-token protocols below that floor. Implied value is a model, not a promise.' })
       ),
       el('div', { class: 'facts' },
-        el('div', { class: 'fact' }, el('span', { text: 'Watchlist covered' }), el('b', { text: DATA.watchlist_size + ' / ' + DATA.watchlist_size })),
-        el('div', { class: 'fact' }, el('span', { text: 'Pre-token rows scored' }), el('b', { text: String(DATA.board_size) })),
-        el('div', { class: 'fact' }, el('span', { text: 'Early rows below the floor' }), el('b', { text: String(DATA.early_size) })),
-        el('div', { class: 'fact' }, el('span', { text: 'Live-token protocols set aside' }), el('b', { text: String(DATA.live_size) }))
+        el('div', { class: 'fact hot' }, el('span', { text: 'Top implied' }), el('b', { text: fmtUsd(top ? top.implied_value_usd : 0) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Watchlist' }), el('b', { text: DATA.watchlist_size + ' / ' + DATA.watchlist_size })),
+        el('div', { class: 'fact' }, el('span', { text: 'Rows scored' }), el('b', { text: String(DATA.board_size) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Below floor' }), el('b', { text: String(DATA.early_size) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Live tokens' }), el('b', { text: String(DATA.live_size) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Snapshot' }), el('b', { text: String(DATA.as_of).slice(0, 10) }))
       )
     );
+  }
+
+  // The category chips are the board's shortest path: one click narrows 200 rows to one sector and
+  // the count on the chip is the sector's share of the ranked board, not a separate number.
+  function categoryCounts() {
+    var counts = {};
+    DATA.rows.forEach(function (r) { var c = r.category || 'Other'; counts[c] = (counts[c] || 0) + 1; });
+    return Object.keys(counts).map(function (c) { return { category: c, count: counts[c] }; })
+      .sort(function (a, b) { return b.count - a.count || (a.category < b.category ? -1 : 1); });
+  }
+  function chips() {
+    var all = el('button', { class: 'chip', type: 'button', 'aria-pressed': state.category === 'all' ? 'true' : 'false', onclick: function () { state.category = 'all'; writeHash(); render(); } },
+      el('span', { text: 'All sectors' }), el('b', { text: String(DATA.rows.length) }));
+    var rest = categoryCounts().slice(0, 7).map(function (c) {
+      return el('button', { class: 'chip', type: 'button', 'aria-pressed': state.category === c.category ? 'true' : 'false', onclick: function () { state.category = state.category === c.category ? 'all' : c.category; writeHash(); render(); } },
+        el('span', { text: c.category }), el('b', { text: String(c.count) }));
+    });
+    return el('div', { class: 'chips', role: 'group', 'aria-label': 'Filter by sector' }, [all].concat(rest));
   }
 
   function controls() {
@@ -189,7 +211,7 @@
     return el('div', { class: 'controls' },
       el('div', { class: 'field' }, el('label', { for: 'q', text: 'Search' }), search),
       el('div', { class: 'field' }, el('label', { for: 'category', text: 'Category' }), select),
-      el('div', { class: 'field' }, el('span', { class: 'sub', text: 'Token status' }), el('div', { class: 'tabs' }, pre, live)),
+      el('div', { class: 'field' }, el('span', { class: 'sub field-label', text: 'Token status' }), el('div', { class: 'tabs' }, pre, live)),
       el('span', { class: 'count', text: state.tab === 'pre-token' ? rows().length + ' rows shown' : DATA.live.length + ' live-token protocols' })
     );
   }
@@ -198,7 +220,7 @@
     return el('th', { scope: 'col' },
       el('button', { type: 'button', onclick: function () { if (state.sort === key) state.dir = -state.dir; else { state.sort = key; state.dir = -1; } render(); } },
         label,
-        state.sort === key ? el('span', { 'aria-hidden': 'true', text: state.dir < 0 ? ' v' : ' ^' }) : null
+        state.sort === key ? el('span', { 'aria-hidden': 'true', text: state.dir < 0 ? ' \u25bc' : ' \u25b2' }) : null
       )
     );
   }
@@ -226,7 +248,8 @@
         el('td', { class: 'num', text: String(r.rank) }),
         el('td', null, el('div', { class: 'name' },
           el('b', { text: r.name }),
-          el('span', { class: 'sub', text: (r.category || 'Other') + ' on ' + (r.chains && r.chains.length ? r.chains.slice(0, 2).join(', ') : 'an unnamed chain') })
+          el('span', { class: 'sub', text: (r.category || 'Other') }),
+          el('div', { class: 'tags' }, (r.chains || []).slice(0, 3).map(function (c) { return el('span', { class: 'tag', text: c }); }))
         )),
         el('td', { class: 'num', text: fmtUsd(r.tvl_usd) }),
         el('td', { class: 'num ' + growthClass, text: growth }),
@@ -235,6 +258,7 @@
           el('div', { class: 'bar', 'aria-hidden': 'true' }, el('i', { style: 'width:' + Math.max(3, Math.round((r.implied_value_usd / max) * 100)) + '%' })),
           el('span', { class: 'num', text: fmtUsd(r.implied_value_usd) })
         )),
+        el('td', { class: 'num signal', text: (r.tvl_usd > 0 ? (r.implied_value_usd / r.tvl_usd).toFixed(2) + '\u00d7' : 'n/a') }),
         el('td', null, el('span', { class: 'status', text: 'no token' }))
       );
       tbody.appendChild(tr);
@@ -242,7 +266,7 @@
     return el('div', { class: 'panel' },
       el('div', { class: 'table-wrap' },
         el('table', null,
-          el('caption', { class: 'sub', text: 'Pre-token protocols, strongest implied value first. Select a row for its model and farm plan.' }),
+          el('caption', { class: 'sub', text: 'Pre-token protocols, strongest implied value first. The bar is implied value relative to the top row. Select a row for its model and farm plan.' }),
           el('thead', null, el('tr', null,
             sortHeader('implied', 'Rank'),
             sortHeader('name', 'Protocol'),
@@ -250,6 +274,7 @@
             sortHeader('growth', '7d'),
             sortHeader('age', 'Age'),
             sortHeader('implied', 'Implied value'),
+            el('th', { scope: 'col', text: 'vs TVL' }),
             el('th', { scope: 'col', text: 'Token' })
           )),
           tbody
@@ -319,7 +344,8 @@
         el('div', null, el('span', { text: 'Age with no token' }), el('b', { class: 'num', text: fmtAge(row.age_days) })),
         el('div', null, el('span', { text: 'Growth multiplier' }), el('b', { class: 'num', text: String(row.growth_multiplier) })),
         el('div', null, el('span', { text: 'Maturity multiplier' }), el('b', { class: 'num', text: String(row.maturity_multiplier) })),
-        el('div', null, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) }))
+        el('div', null, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) })),
+        el('div', null, el('span', { text: 'Multiple of TVL' }), el('b', { class: 'num signal', text: (row.tvl_usd > 0 ? (row.implied_value_usd / row.tvl_usd).toFixed(2) + '\u00d7' : 'n/a') }))
       ),
       el('p', { class: 'sub', text: 'Model ' + DATA.model_version + ': the same function scores every protocol. The page recomputes this row as ' + fmtUsd(impliedOf(row, DATA.model)) + (impliedOf(row, DATA.model) === row.implied_value_usd ? ', the same number board.json carries.' : ', which differs from the board: the data would be stale.') + ' This is an estimate, not a price.' })
     ));
@@ -345,6 +371,7 @@
     shell.appendChild(header());
     shell.appendChild(lede());
     shell.appendChild(controls());
+    if (state.tab === 'pre-token') shell.appendChild(chips());
     shell.appendChild(state.tab === 'pre-token' ? boardTable() : liveTable());
     if (state.tab === 'pre-token') shell.appendChild(modelPanel());
     app.appendChild(shell);

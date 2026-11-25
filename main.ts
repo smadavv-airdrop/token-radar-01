@@ -29,6 +29,9 @@ const screenshotsSrc = `${__dirname}/screenshots`;
 
 if (existsSync(dashboardSrc)) {
   cpSync(dashboardSrc, `${outputDir}/dashboard`, { recursive: true });
+  // The dashboard is a static page: it reads window.RADAR, so the same run writes the data file
+  // beside it. No network, no fetch, no server: opening dashboard/index.html renders the board.
+  writeFileSync(`${outputDir}/dashboard/data.js`, `window.RADAR = ${JSON.stringify(radar)};\n`);
 }
 if (existsSync(screenshotsSrc)) {
   cpSync(screenshotsSrc, `${outputDir}/screenshots`, { recursive: true });
