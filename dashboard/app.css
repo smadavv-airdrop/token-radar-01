@@ -217,3 +217,7 @@ tbody td:first-child { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* The worked example reads as a note, not as body copy: same ink, one accent rule. */
+.lede .worked { color: var(--ink); font-size: 13px; line-height: 1.65; padding: 10px 12px; border-left: 2px solid var(--accent-dim); background: var(--raised); border-radius: 0 6px 6px 0; max-width: 78ch; }
+.detail-section .total { padding-top: 10px; border-top: 1px solid var(--border); color: var(--ink); }

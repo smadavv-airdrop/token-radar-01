@@ -29,7 +29,9 @@
     multiple_cap: 12,
     trim: 0.2, // drop the top and bottom fifth of peers before taking the median
     shrink_peers: 4, // a category needs this many peers before its own median outweighs the market's
-    airdrop_share: 0.004, // a single farmed wallet's expected slice of implied value
+    ticket_share: 0.00001, // a qualifying wallet's ticket, as a slice of the implied value
+    ticket_min: 20, // a dust ticket is still a ticket: floor it
+    ticket_max: 5000, // and cap it, because one wallet never gets a protocol-sized slice
     max_implied: 1e14, // the gate's ceiling
   };
 
@@ -109,11 +111,34 @@
     return { global: global, cats: cats, as_of: snapshot.as_of, version: C.version };
   }
 
+  // The page is handed the comparables as a flat list (it ships in data.dat), while the model wants
+  // them keyed by category with the peer count under one name. Normalise once, in place, so the page
+  // recomputes a row with exactly the inputs that wrote board.json.
+  function ctxCats(ctx) {
+    if (!Array.isArray(ctx.cats)) return ctx.cats || {};
+    if (!ctx.catsIndex) {
+      var idx = {};
+      ctx.cats.forEach(function (e) {
+        var key = e.category || e.cat || 'Other';
+        idx[key] = {
+          live: finite(e.live, 0),
+          total: finite(e.total, 1),
+          n: finite(e.peers, finite(e.n, 0)),
+          median: e.multiple === undefined ? e.median : e.multiple,
+          q25: e.q25 === undefined ? null : e.q25,
+          q75: e.q75 === undefined ? null : e.q75,
+        };
+      });
+      ctx.catsIndex = idx;
+    }
+    return ctx.catsIndex;
+  }
+
   // The multiple a category is valued at: its own peer median, shrunk toward the whole market when it
   // has few peers, so the point value never rests on one token's launch.
   function multipleFor(cat, ctx) {
     var g = ctx.global;
-    var c = ctx.cats[cat];
+    var c = ctxCats(ctx)[cat];
     if (!c || c.median === null) return { median: g.median, q25: g.q25, q75: g.q75, peers: 0, source: 'market' };
     // One live peer is a data point, not a sector median: it gets zero weight and the market's own
     // multiple is used, so a single launch cannot drag a whole category's values with it.
@@ -133,10 +158,11 @@
   // to change than one listed last quarter.
   function oddsFor(p, ctx, age) {
     var cat = p.category || 'Other';
-    var c = ctx.cats[cat] || { live: 0, total: 1 };
+    var cats = ctxCats(ctx);
+    var c = cats[cat] || { live: 0, total: 1 };
     var globalLive = ctx.global.n;
     var globalTotal = 0;
-    Object.keys(ctx.cats).forEach(function (k) { globalTotal += ctx.cats[k].total; });
+    Object.keys(cats).forEach(function (k) { globalTotal += cats[k].total; });
     var prior = globalTotal > 0 ? globalLive / globalTotal : 0.1;
     var w = C.shrink_peers;
     var rate = (c.live + prior * w) / (c.total + w);
@@ -217,7 +243,8 @@
     var gasTotal = gas * (2 + weeks); // entry, claim, and one qualifying action a week
     var odds = v && isFinite(v.odds) ? v.odds : 0.1;
     var implied = v && isFinite(v.implied) ? v.implied : finite(p.tvl_usd, 1e6) * 0.25;
-    var gross = implied * C.airdrop_share * odds;
+    var ticket = clamp(implied * C.ticket_share, C.ticket_min, C.ticket_max);
+    var gross = ticket * odds;
     var hours = 0.5 + weeks * 0.25;
     var netHour = Math.max(-999, Math.round((gross - gasTotal) / hours));
     var actions = actionFor(p, capital, chain);
@@ -258,6 +285,23 @@
         time: '10 minutes',
       },
     ];
+  }
+
+  // The same plan as farm(), reduced to the four figures a reader budgets from: capital, gas, hours
+  // and the model's gross value. Kept beside farm() so both call one set of expressions.
+  function farmTotals(p, v) {
+    var chain = p.chains && p.chains.length > 0 ? p.chains[0] : '';
+    var gas = gasFor(chain);
+    var capital = capitalFor(finite(p.tvl_usd, 1e6));
+    var age = v && v.age_days !== null && v.age_days !== undefined ? v.age_days : C.unknown_age_days;
+    var hold = age < 180 ? 60 : age < 365 ? 45 : 30;
+    var weeks = Math.max(4, Math.round(hold / 7));
+    var gasAll = gas * (5 + weeks);
+    var odds = v && isFinite(v.odds) ? v.odds : 0.1;
+    var implied = v && isFinite(v.implied) ? v.implied : finite(p.tvl_usd, 1e6) * 0.25;
+    var ticket = clamp(implied * C.ticket_share, C.ticket_min, C.ticket_max);
+    var gross = ticket * odds;
+    return { capital: capital, gas: gasAll, weeks: weeks, hold: hold, odds: odds, gross: gross, net: gross - gasAll, hours: 0.5 + weeks * 0.25 + 1.25 };
   }
 
   function usd(n) {
@@ -306,6 +350,7 @@
     multipleFor: multipleFor,
     value: value,
     farm: farm,
+    farmTotals: farmTotals,
     stepText: stepText,
     usd: usd,
     pct: pct,

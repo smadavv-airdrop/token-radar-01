@@ -25,6 +25,11 @@
     if (n === null || n === undefined || !isFinite(n)) return 'n/a';
     return (n > 0 ? '+' : '') + n.toFixed(2) + '%';
   }
+  function fmtOdds(n) {
+    if (n === null || n === undefined || !isFinite(n)) return 'n/a';
+    var pct = n * 100;
+    return (pct < 10 ? pct.toFixed(1) : Math.round(pct)) + '%';
+  }
   function fmtAge(days) {
     if (days === null || days === undefined) return 'unknown';
     if (days >= 365) return (days / 365).toFixed(1) + 'y';
@@ -128,7 +133,8 @@
       el('div', null,
         el('span', { class: 'eyebrow', text: 'Pre-token radar / ' + DATA.rows.length + ' ranked' }),
         el('h1', { text: DATA.board_size + ' pre-token protocols, ranked by implied value' }),
-        el('p', { text: 'The board is every protocol with at least $' + Math.round(DATA.floor_usd / 1e6) + 'M of TVL and no token on record (' + DATA.watchlist_size + ' watchlist names), plus the ' + DATA.early_size + ' largest pre-token protocols below that floor. Each value is its TVL priced at the multiple its own category already trades at, with the peers\' interquartile spread as its range. It is a model, not a promise.' })
+        el('p', { text: 'The board is every protocol with at least $' + Math.round(DATA.floor_usd / 1e6) + 'M of TVL and no token on record (' + DATA.watchlist_size + ' watchlist names), plus the ' + DATA.early_size + ' largest pre-token protocols below that floor. Each value is its TVL priced at the multiple its own category already trades at, with the peers\' interquartile spread as its range. It is a model, not a promise.' }),
+        top ? el('p', { class: 'sub worked', text: 'Row 1 in full: ' + fmtUsd(top.tvl_usd) + ' TVL \u00d7 ' + (top.multiple_of_tvl||0).toFixed(3) + ' category median \u00d7 ' + (top.model||top).growth_multiplier + ' growth \u00d7 ' + (top.model||top).maturity_multiplier + ' age = ' + fmtUsd(top.implied_value_usd) + ' implied, ' + fmtUsd(top.implied_low_usd) + ' to ' + fmtUsd(top.implied_high_usd) + ' on the peer spread, at ' + fmtOdds(top.launch_odds) + ' launch odds.' }) : null
       ),
       el('div', { class: 'facts' },
         el('div', { class: 'fact hot' }, el('span', { text: 'Top implied' }), el('b', { text: fmtUsd(top ? top.implied_value_usd : 0) })),
@@ -221,16 +227,16 @@
           el('span', { class: 'num', text: fmtUsd(r.implied_value_usd) })
         )),
         el('td', { class: 'num sub', text: fmtUsd(r.implied_low_usd) + ' \u2013 ' + fmtUsd(r.implied_high_usd) }),
-        el('td', { class: 'num signal', text: Math.round((r.launch_odds || 0) * 100) + '% \u00b7 ' + fmtUsd(expectancy(r)) }),
-        el('td', { class: 'num', text: (r.multiple_of_tvl ? r.multiple_of_tvl.toFixed(2) + '\u00d7' : 'n/a') }),
-        el('td', null, el('span', { class: 'status', text: 'no token' }))
+        el('td', { class: 'num', text: fmtOdds(r.launch_odds) + ' \u00b7 ' + fmtUsd(expectancy(r)) }),
+        el('td', { class: 'num', title: 'Category median market cap / TVL, the multiple this TVL is priced at', text: (r.multiple_of_tvl ? r.multiple_of_tvl.toFixed(2) + '\u00d7' : 'n/a') }),
+        el('td', { class: 'num sub', title: 'Implied value divided by TVL: the model multiple after its own growth and age adjustments', text: (r.tvl_usd > 0 ? (r.implied_value_usd / r.tvl_usd).toFixed(2) + '\u00d7' : 'n/a') })
       );
       tbody.appendChild(tr);
     });
     return el('div', { class: 'panel' },
       el('div', { class: 'table-wrap' },
         el('table', null,
-          el('caption', { class: 'sub', text: 'Pre-token protocols, strongest implied value first. The bar is implied value relative to the top row. Select a row for its model and farm plan.' }),
+          el('caption', { class: 'sub', text: 'Pre-token protocols, strongest implied value first. The bar is implied value relative to the top row. Peer x is the category median market cap / TVL; Implied / TVL is that median after this protocol own growth and age adjustments, so Implied / TVL x TVL is the implied value. Select a row for its model and farm plan.' }),
           el('thead', null, el('tr', null,
             sortHeader('implied', 'Rank'),
             sortHeader('name', 'Protocol'),
@@ -239,9 +245,9 @@
             sortHeader('age', 'Age'),
             sortHeader('implied', 'Implied value'),
             el('th', { scope: 'col', text: 'Range (25-75%)' }),
-            el('th', { scope: 'col', text: 'Odds / EV' }),
-            el('th', { scope: 'col', text: '\u00d7 TVL' }),
-            el('th', { scope: 'col', text: 'Token' })
+            el('th', { scope: 'col', text: 'Odds \u00b7 EV' }),
+            el('th', { scope: 'col', text: 'Peer \u00d7' }),
+            el('th', { scope: 'col', text: 'Implied / TVL' })
           )),
           tbody
         )
@@ -284,6 +290,11 @@
       el('div', { class: 'formula' },
         'implied = round( tvl_usd x category_multiple x (1 + clamp(change_7d, ' + m.growth_floor + ', ' + m.growth_cap + ') / 100 x ' + m.growth_weight + ') x (' + m.maturity_floor + ' + min(age_days, ' + m.maturity_days + ') / ' + m.maturity_days + ' x ' + m.maturity_range + ') )'
       ),
+      (function () {
+        var top = DATA.rows[0];
+        if (!top) return null;
+        return el('p', { class: 'sub worked', text: 'Worked example, rank 1, ' + top.name + ': ' + fmtUsd(top.tvl_usd) + ' TVL \u00d7 ' + (top.multiple_of_tvl||0).toFixed(3) + ' (its category median from ' + top.peer_tokens + ' priced peer' + (top.peer_tokens === 1 ? '' : 's') + ') \u00d7 ' + (top.model||top).growth_multiplier + ' (7d growth of ' + fmtPct(top.change_7d) + ') \u00d7 ' + (top.model||top).maturity_multiplier + ' (age ' + fmtAge(top.age_days) + ') = ' + fmtUsd(top.implied_value_usd) + ', the number this board carries on row ' + top.rank + '. Every row is that same product of four stated figures, recomputed live by model.js.' });
+      })(),
       el('p', { class: 'sub', text: 'The category multiple is the trimmed median of market cap / TVL among that category live tokens, over peer sets of 1 to ' + widest + ' tokens. A category with fewer than ' + m.shrink_peers + ' peers is shrunk toward the whole market median, so one launch cannot set a sector. The range beside each row widens that value by the peers interquartile spread, clamped to a factor of ' + (Math.round(Math.exp(0.3) * 10) / 10) + 'x at the narrowest and ' + (Math.round(Math.exp(2) * 10) / 10) + 'x at the widest; the low is never above the value and the high never below it. Age is the time since the index first listed the protocol; an unlisted age uses ' + m.unknown_age_days + ' days. Launch odds are the category base rate of protocols that already have a token, smoothed by the whole market rate and discounted 8% a year without one. Risk-adjusted value is the value times those odds, which is the number a farm is actually betting on.' }),
       el('p', { class: 'eyebrow', text: 'Comparable set, by category' }),
       el('div', { class: 'table-wrap' },
@@ -336,12 +347,12 @@
         el('div', null, el('span', { text: 'TVL' }), el('b', { class: 'num', text: fmtUsd(row.tvl_usd) })),
         el('div', null, el('span', { text: 'Seven-day growth' }), el('b', { class: 'num', text: fmtPct(row.change_7d) })),
         el('div', null, el('span', { text: 'Age with no token' }), el('b', { class: 'num', text: fmtAge(row.age_days) })),
-        el('div', null, el('span', { text: 'Growth multiplier' }), el('b', { class: 'num', text: String(row.growth_multiplier) })),
-        el('div', null, el('span', { text: 'Maturity multiplier' }), el('b', { class: 'num', text: String(row.maturity_multiplier) })),
+        el('div', null, el('span', { text: 'Growth multiplier' }), el('b', { class: 'num', text: String((row.model || row).growth_multiplier) })),
+        el('div', null, el('span', { text: 'Maturity multiplier' }), el('b', { class: 'num', text: String((row.model || row).maturity_multiplier) })),
         el('div', null, el('span', { text: 'Category multiple of TVL' }), el('b', { class: 'num', text: (row.multiple_of_tvl ? row.multiple_of_tvl.toFixed(3) + '\u00d7' : 'n/a') + ' from ' + row.peer_tokens + ' token' + (row.peer_tokens === 1 ? '' : 's') })),
         el('div', null, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) })),
         el('div', null, el('span', { text: 'Model range (25-75%)' }), el('b', { class: 'num', text: fmtUsd(row.implied_low_usd) + ' to ' + fmtUsd(row.implied_high_usd) })),
-        el('div', null, el('span', { text: 'Launch odds' }), el('b', { class: 'num', text: Math.round((row.launch_odds || 0) * 100) + '%' })),
+        el('div', null, el('span', { text: 'Launch odds' }), el('b', { class: 'num', text: fmtOdds(row.launch_odds) })),
         el('div', null, el('span', { text: 'Risk-adjusted value' }), el('b', { class: 'num signal', text: fmtUsd(expectancy(row)) }))
       ),
       el('p', { class: 'sub', text: 'Model ' + DATA.model_version + ': the page recomputes this row with the same function that wrote board.json as ' + fmtUsd(impliedOf(row).implied) + (impliedOf(row).implied === row.implied_value_usd ? ', the same number the board carries.' : ', which differs from the board: the data would be stale.') + " The value is TVL priced at the multiple this protocol's category already trades at, adjusted for its own seven-day growth and for how long it has gone without a token. It is an estimate, not a price." })
@@ -353,7 +364,11 @@
         var action = at >= 0 ? s.slice(0, at) : s;
         var tail = at >= 0 ? s.slice(at + 1) : '';
         return el('li', null, el('b', { text: action }), el('span', { class: 'cost', text: tail }));
-      }))
+      })),
+      (function () {
+        var t = M.farmTotals(row, M.value(row, CTX));
+        return el('p', { class: 'sub total', text: 'Budget for the whole plan: $' + t.capital + ' of working capital plus about $' + Math.round(t.gas) + ' of gas across every step, ' + (Math.round(t.hours * 10) / 10) + ' hours of work over ' + t.weeks + ' weeks, holding at least ' + t.hold + ' days. At ' + fmtOdds(t.odds) + ' launch odds the modelled gross is $' + Math.round(t.gross) + ', which is $' + Math.round(t.net) + ' after gas: the plan is worth running only if that number clears the hours.' });
+      })()
     ));
     if (typeof dialog.showModal === 'function') {
       if (!dialog.open) dialog.showModal();
