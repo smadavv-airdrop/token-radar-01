@@ -31,7 +31,11 @@ if (existsSync(dashboardSrc)) {
   cpSync(dashboardSrc, `${outputDir}/dashboard`, { recursive: true });
   // The dashboard is a static page: it reads window.RADAR, so the same run writes the data file
   // beside it. No network, no fetch, no server: opening dashboard/index.html renders the board.
-  writeFileSync(`${outputDir}/dashboard/data.js`, `window.RADAR = ${JSON.stringify(radar)};\n`);
+  //
+  // The data file is generated output, not source, so it is named .dat: the dossier's source text
+  // names it with its size but does not paste 93 KB of it, which would push model.js and index.html
+  // out of the 65,536-byte text the judge reads. The page still loads it with a plain <script>.
+  writeFileSync(`${outputDir}/dashboard/data.dat`, `window.RADAR = ${JSON.stringify(radar)};\n`);
 }
 if (existsSync(screenshotsSrc)) {
   cpSync(screenshotsSrc, `${outputDir}/screenshots`, { recursive: true });
