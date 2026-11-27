@@ -236,22 +236,24 @@
   function farm(p, v) {
     var chain = p.chains && p.chains.length > 0 ? p.chains[0] : 'its first chain';
     var gas = gasFor(chain);
-    var capital = capitalFor(finite(p.tvl_usd, 1e6));
+    // Every figure below is farmTotals()'s, so the steps, the budget line under them and the per-hour
+    // claim cannot disagree: one set of expressions, called once, printed in three places.
+    var T = farmTotals(p, v);
+    var capital = T.capital;
     var age = v && v.age_days !== null && v.age_days !== undefined ? v.age_days : C.unknown_age_days;
-    var hold = age < 180 ? 60 : age < 365 ? 45 : 30;
-    var weeks = Math.max(4, Math.round(hold / 7));
-    var gasTotal = gas * (2 + weeks); // entry, claim, and one qualifying action a week
-    var odds = v && isFinite(v.odds) ? v.odds : 0.1;
-    var implied = v && isFinite(v.implied) ? v.implied : finite(p.tvl_usd, 1e6) * 0.25;
-    var ticket = clamp(implied * C.ticket_share, C.ticket_min, C.ticket_max);
-    var gross = ticket * odds;
-    var hours = 0.5 + weeks * 0.25;
-    var netHour = Math.max(-999, Math.round((gross - gasTotal) / hours));
+    var hold = T.hold;
+    var weeks = T.weeks;
+    var gasTotal = T.gas;
+    var odds = T.odds;
+    var implied = T.implied;
+    var hours = T.hours;
+    var netHour = Math.max(-999, Math.round(T.net / hours));
+    var grossHour = Math.max(-999, Math.round(T.gross / hours));
     var actions = actionFor(p, capital, chain);
     return [
       {
-        text: 'Set up a fresh wallet for this farm only, funded with $' + Math.round(capital + gasTotal + 20) + ' of USDC and nothing else, and keep its seed phrase offline.',
-        cost: '$' + Math.round(capital + gasTotal + 20) + ' of working capital, of which about $' + Math.round(gasTotal) + ' is gas',
+        text: 'Set up a fresh wallet for this farm only, funded with $' + Math.round(capital + gasTotal + 20) + ' of USDC and nothing else, and keep its seed phrase offline: $' + capital + ' of capital, $' + Math.round(gasTotal) + ' of gas for the whole plan and $20 of slack.',
+        cost: '$' + Math.round(capital + gasTotal + 20) + ' in the wallet, of which $' + Math.round(gasTotal) + ' is gas and $20 is a buffer',
         time: '10 minutes',
       },
       {
@@ -262,10 +264,10 @@
       {
         text: 'Repeat one qualifying action each week for ' + weeks + ' weeks, mixing the actions the protocol counts: a deposit, a borrow, a swap, a vote or a claim, and never a wash trade.',
         cost: 'about $' + round(gas * weeks) + ' of gas over ' + weeks + ' weeks',
-        time: Math.round(weeks * 0.25 * 10) / 10 + ' hours in total, 15 minutes a week',
+        time: Math.round(weeks * 0.25 * 10) / 10 + (weeks * 0.25 === 1 ? ' hour' : ' hours') + ' in total, 15 minutes a week',
       },
       {
-        text: 'Hold at least ' + hold + ' days so the position is counted in more than one snapshot; ' + (age > 365 ? 'this protocol is ' + Math.round(age / 365) + ' years old, so the window is short by design.' : 'this protocol is young, so a longer window is worth the wait.'),
+        text: 'Hold at least ' + hold + ' days so the position is counted in more than one snapshot; ' + (age > 365 ? 'this protocol is ' + Math.round(age / 365) + (Math.round(age / 365) === 1 ? ' year old, so the window is short by design.' : ' years old, so the window is short by design.') : 'this protocol is young, so a longer window is worth the wait.'),
         cost: '$' + capital + ' stays in the position, at the protocol\'s own risk',
         time: hold + ' days',
       },
@@ -275,12 +277,12 @@
         time: '15 minutes of reading',
       },
       {
-        text: 'Unwind at the exit the model implies: sell the claim when the position\'s value reaches the top of its $' + usd(v && v.low) + ' to $' + usd(v && v.high) + ' range, and unwind the position if the protocol\'s TVL halves.',
+        text: 'Unwind at the exit the model implies: sell the claim when the position\'s value reaches the top of its ' + usd(v && v.low) + ' to ' + usd(v && v.high) + ' range, and unwind the position if the protocol\'s TVL halves.',
         cost: 'about $' + round(gas * 3) + ' of gas to exit and claim',
         time: '20 minutes',
       },
       {
-        text: 'Log the wallet, each date and each transaction, then compare the realised value to the model: at ' + pct(odds) + ' launch odds against ' + usd(implied) + ' modelled value, this farm nets about $' + netHour + ' an hour over ' + Math.round(hours * 10) / 10 + ' hours.',
+        text: 'Log the wallet, each date and each transaction, then compare the realised value to the model: at ' + pct1(odds) + ' launch odds against ' + usd(implied) + ' modelled value, this farm is worth about $' + grossHour + ' an hour before gas and $' + netHour + ' after it, over ' + Math.round(hours * 10) / 10 + ' hours.',
         cost: 'nothing but the log',
         time: '10 minutes',
       },
@@ -296,12 +298,14 @@
     var age = v && v.age_days !== null && v.age_days !== undefined ? v.age_days : C.unknown_age_days;
     var hold = age < 180 ? 60 : age < 365 ? 45 : 30;
     var weeks = Math.max(4, Math.round(hold / 7));
-    var gasAll = gas * (5 + weeks);
+    // Every gas line the steps name: two transactions in, one a week, two to read-and-claim, three
+    // to exit. The budget line sums these, so it cannot undercut the steps it summarises.
+    var gasAll = gas * (7 + weeks);
     var odds = v && isFinite(v.odds) ? v.odds : 0.1;
     var implied = v && isFinite(v.implied) ? v.implied : finite(p.tvl_usd, 1e6) * 0.25;
     var ticket = clamp(implied * C.ticket_share, C.ticket_min, C.ticket_max);
     var gross = ticket * odds;
-    return { capital: capital, gas: gasAll, weeks: weeks, hold: hold, odds: odds, gross: gross, net: gross - gasAll, hours: 0.5 + weeks * 0.25 + 1.25 };
+    return { capital: capital, gas: gasAll, weeks: weeks, hold: hold, odds: odds, implied: implied, ticket: ticket, gross: gross, net: gross - gasAll, hours: 0.5 + weeks * 0.25 + 1.25 };
   }
 
   function usd(n) {
@@ -313,6 +317,13 @@
   }
   function pct(n) {
     return Math.round(n * 100) + '%';
+  }
+  // Odds under 10% keep one decimal everywhere they are printed, so the plan, the drawer's headline
+  // and the budget line under the steps all read 3.5%, never 4% beside 3.5%.
+  function pct1(n) {
+    if (!isFinite(n)) return 'n/a';
+    var p = n * 100;
+    return (p < 10 ? p.toFixed(1) : String(Math.round(p))) + '%';
   }
 
   function actionFor(p, capital, chain) {
